@@ -7,29 +7,31 @@
 #ifndef BOOST_CHARCONV_DETAIL_TO_CHARS_INTEGER_IMPL_HPP
 #define BOOST_CHARCONV_DETAIL_TO_CHARS_INTEGER_IMPL_HPP
 
+#if !defined(BOOST_USE_MODULES) || defined(BOOST_CHARCONV_INTERFACE_UNIT)
+
 #include <boost/charconv/detail/config.hpp>
 #include <boost/charconv/detail/memcpy.hpp>
 #include <boost/charconv/detail/to_chars_result.hpp>
 #include <boost/charconv/detail/integer_search_trees.hpp>
 #include <boost/charconv/detail/emulated128.hpp>
 #include <boost/charconv/detail/apply_sign.hpp>
-#include <limits>
-#include <system_error>
-#include <type_traits>
-#include <array>
-#include <limits>
-#include <utility>
-#include <cstring>
-#include <cstdio>
-#include <cerrno>
-#include <cstdint>
-#include <climits>
-#include <cmath>
+#include <boost/config/std/limits.hpp>
+#include <boost/config/std/system_error.hpp>
+#include <boost/config/std/type_traits.hpp>
+#include <boost/config/std/array.hpp>
+#include <boost/config/std/limits.hpp>
+#include <boost/config/std/utility.hpp>
+#include <boost/config/std/cstring.hpp>
+#include <boost/config/std/cstdio.hpp>
+#include <boost/config/std/cerrno.hpp>
+#include <boost/config/std/cstdint.hpp>
+#include <boost/config/std/climits.hpp>
+#include <boost/config/std/cmath.hpp>
 
 namespace boost { namespace charconv { namespace detail {
 
 
-static constexpr char radix_table[] = {
+BOOST_INLINE_CONSTEXPR char radix_table[] = {
         '0', '0', '0', '1', '0', '2', '0', '3', '0', '4',
         '0', '5', '0', '6', '0', '7', '0', '8', '0', '9',
         '1', '0', '1', '1', '1', '2', '1', '3', '1', '4',
@@ -52,7 +54,7 @@ static constexpr char radix_table[] = {
         '9', '5', '9', '6', '9', '7', '9', '8', '9', '9'
 };
 
-static constexpr char digit_table[] = {
+BOOST_INLINE_CONSTEXPR char digit_table[] = {
         '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
         'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
         'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
@@ -214,15 +216,13 @@ BOOST_CHARCONV_CONSTEXPR to_chars_result to_chars_integer_impl(char* first, char
 // to extract the digits
 //
 // See: https://quuxplusone.github.io/blog/2019/02/28/is-int128-integral/
-template <typename Integer>
+#ifdef BOOST_CHARCONV_HAS_INT128
+template <typename Integer, typename Unsigned_Integer = boost::uint128_type>
+#else
+template <typename Integer, typename Unsigned_Integer = uint128>
+#endif
 BOOST_CHARCONV_CONSTEXPR to_chars_result to_chars_128integer_impl(char* first, char* last, Integer value) noexcept
 {
-    #ifdef BOOST_CHARCONV_HAS_INT128
-    using Unsigned_Integer = boost::uint128_type;
-    #else
-    using Unsigned_Integer = uint128;
-    #endif
-
     Unsigned_Integer unsigned_value {};
 
     const std::ptrdiff_t user_buffer_size = last - first;
@@ -234,10 +234,13 @@ BOOST_CHARCONV_CONSTEXPR to_chars_result to_chars_128integer_impl(char* first, c
     }
 
     // Strip the sign from the value and apply at the end after parsing if the type is signed
-    #ifdef BOOST_CHARCONV_HAS_INT128
-    BOOST_IF_CONSTEXPR (std::is_same<boost::int128_type, Integer>::value)
+    BOOST_IF_CONSTEXPR (std::numeric_limits<Integer>::is_signed
+                        #ifdef BOOST_CHARCONV_HAS_INT128
+                        || std::is_same<boost::int128_type, Integer>::value
+                        #endif
+                        )
     {
-        if (value < 0)
+        if (value < static_cast<Integer>(0))
         {
             is_negative = true;
             unsigned_value = -(static_cast<Unsigned_Integer>(value));
@@ -248,7 +251,6 @@ BOOST_CHARCONV_CONSTEXPR to_chars_result to_chars_128integer_impl(char* first, c
         }
     }
     else
-    #endif
     {
         unsigned_value = static_cast<Unsigned_Integer>(value);
     }
@@ -270,7 +272,7 @@ BOOST_CHARCONV_CONSTEXPR to_chars_result to_chars_128integer_impl(char* first, c
     // If the value fits into 64 bits use the other method of processing
     if (converted_value < (std::numeric_limits<std::uint64_t>::max)())
     {
-        return to_chars_integer_impl(first, last, static_cast<std::uint64_t>(value));
+        return to_chars_integer_impl(first, last, static_cast<std::uint64_t>(converted_value));
     }
 
     constexpr std::uint32_t ten_9 = UINT32_C(1000000000);
@@ -278,7 +280,7 @@ BOOST_CHARCONV_CONSTEXPR to_chars_result to_chars_128integer_impl(char* first, c
     int num_chars[5] {};
     int i = 0;
 
-    while (converted_value != 0)
+    while (converted_value != static_cast<Unsigned_Integer>(0))
     {
         auto digits = static_cast<std::uint32_t>(converted_value % ten_9);
         num_chars[i] = num_digits(digits);
@@ -320,7 +322,7 @@ BOOST_CHARCONV_CONSTEXPR to_chars_result to_chars_integer_impl(char* first, char
         return {last, std::errc::invalid_argument};
     }
 
-    if (value == 0)
+    if (value == static_cast<Integer>(0))
     {
         *first++ = '0';
         return {first, std::errc()};
@@ -331,7 +333,7 @@ BOOST_CHARCONV_CONSTEXPR to_chars_result to_chars_integer_impl(char* first, char
 
     BOOST_IF_CONSTEXPR (std::is_signed<Integer>::value)
     {
-        if (value < 0)
+        if (value < static_cast<Integer>(0))
         {
             *first++ = '-';
             unsigned_value = static_cast<Unsigned_Integer>(detail::apply_sign(value));
@@ -358,7 +360,7 @@ BOOST_CHARCONV_CONSTEXPR to_chars_result to_chars_integer_impl(char* first, char
     switch (base)
     {
         case 2:
-            while (unsigned_value != 0)
+            while (unsigned_value != static_cast<Unsigned_Integer>(0))
             {
                 *end-- = static_cast<char>(zero + (unsigned_value & 1U)); // 1<<1 - 1
                 unsigned_value >>= static_cast<Unsigned_Integer>(1);
@@ -366,7 +368,7 @@ BOOST_CHARCONV_CONSTEXPR to_chars_result to_chars_integer_impl(char* first, char
             break;
 
         case 4:
-            while (unsigned_value != 0)
+            while (unsigned_value != static_cast<Unsigned_Integer>(0))
             {
                 *end-- = static_cast<char>(zero + (unsigned_value & 3U)); // 1<<2 - 1
                 unsigned_value >>= static_cast<Unsigned_Integer>(2);
@@ -374,7 +376,7 @@ BOOST_CHARCONV_CONSTEXPR to_chars_result to_chars_integer_impl(char* first, char
             break;
 
         case 8:
-            while (unsigned_value != 0)
+            while (unsigned_value != static_cast<Unsigned_Integer>(0))
             {
                 *end-- = static_cast<char>(zero + (unsigned_value & 7U)); // 1<<3 - 1
                 unsigned_value >>= static_cast<Unsigned_Integer>(3);
@@ -382,25 +384,25 @@ BOOST_CHARCONV_CONSTEXPR to_chars_result to_chars_integer_impl(char* first, char
             break;
 
         case 16:
-            while (unsigned_value != 0)
+            while (unsigned_value != static_cast<Unsigned_Integer>(0))
             {
-                *end-- = digit_table[unsigned_value & 15U]; // 1<<4 - 1
+                *end-- = digit_table[static_cast<std::size_t>(unsigned_value & 15U)]; // 1<<4 - 1
                 unsigned_value >>= static_cast<Unsigned_Integer>(4);
             }
             break;
 
         case 32:
-            while (unsigned_value != 0)
+            while (unsigned_value != static_cast<Unsigned_Integer>(0))
             {
-                *end-- = digit_table[unsigned_value & 31U]; // 1<<5 - 1
+                *end-- = digit_table[static_cast<std::size_t>(unsigned_value & 31U)]; // 1<<5 - 1
                 unsigned_value >>= static_cast<Unsigned_Integer>(5);
             }
             break;
 
         default:
-            while (unsigned_value != 0)
+            while (unsigned_value != static_cast<Unsigned_Integer>(0))
             {
-                *end-- = digit_table[unsigned_value % unsigned_base];
+                *end-- = digit_table[static_cast<std::size_t>(unsigned_value % unsigned_base)];
                 unsigned_value /= unsigned_base;
             }
             break;
@@ -455,5 +457,7 @@ BOOST_CHARCONV_CONSTEXPR to_chars_result to_chars128(char* first, char* last, In
 #endif
 
 }}} // Namespaces
+
+#endif // !defined(BOOST_USE_MODULES) || !defined(BOOST_CHARCONV_INTERFACE_UNIT)
 
 #endif //BOOST_CHARCONV_DETAIL_TO_CHARS_INTEGER_IMPL_HPP

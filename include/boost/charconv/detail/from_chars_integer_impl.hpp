@@ -5,6 +5,8 @@
 #ifndef BOOST_CHARCONV_DETAIL_FROM_CHARS_INTEGER_IMPL_HPP
 #define BOOST_CHARCONV_DETAIL_FROM_CHARS_INTEGER_IMPL_HPP
 
+#if !defined(BOOST_USE_MODULES) || defined(BOOST_CHARCONV_INTERFACE_UNIT)
+
 #include <boost/charconv/detail/apply_sign.hpp>
 #include <boost/charconv/detail/config.hpp>
 #include <boost/charconv/detail/from_chars_result.hpp>
@@ -12,17 +14,17 @@
 #include <boost/charconv/detail/type_traits.hpp>
 #include <boost/charconv/config.hpp>
 #include <boost/config.hpp>
-#include <system_error>
-#include <type_traits>
-#include <limits>
-#include <cstdlib>
-#include <cerrno>
-#include <cstddef>
-#include <cstdint>
+#include <boost/config/std/system_error.hpp>
+#include <boost/config/std/type_traits.hpp>
+#include <boost/config/std/limits.hpp>
+#include <boost/config/std/cstdlib.hpp>
+#include <boost/config/std/cerrno.hpp>
+#include <boost/config/std/cstddef.hpp>
+#include <boost/config/std/cstdint.hpp>
 
 namespace boost { namespace charconv { namespace detail {
 
-static constexpr unsigned char uchar_values[] =
+BOOST_INLINE_CONSTEXPR unsigned char uchar_values[] =
      {255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
       255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
       255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
@@ -42,7 +44,7 @@ static constexpr unsigned char uchar_values[] =
 
 static_assert(sizeof(uchar_values) == 256, "uchar_values should represent all 256 values of unsigned char");
 
-static constexpr double log_2_table[] =
+BOOST_INLINE_CONSTEXPR double log_2_table[] =
 {
     0.0,
     0.0,
@@ -93,7 +95,7 @@ constexpr unsigned char digit_from_char(char val) noexcept
 # pragma warning(push)
 # pragma warning(disable: 4146) // unary minus operator applied to unsigned type, result still unsigned
 # pragma warning(disable: 4189) // 'is_negative': local variable is initialized but not referenced
-
+# pragma warning(disable: 4127) // Conditional expression is constant (if constexpr pre-c++17)
 #elif defined(__clang__)
 # pragma clang diagnostic push
 # pragma clang diagnostic ignored "-Wconstant-conversion"
@@ -186,8 +188,11 @@ BOOST_CXX14_CONSTEXPR from_chars_result from_chars_integer_impl(const char* firs
         }
     }
 
-    #ifdef BOOST_CHARCONV_HAS_INT128
-    BOOST_IF_CONSTEXPR (std::is_same<Integer, boost::int128_type>::value)
+    BOOST_IF_CONSTEXPR ((std::numeric_limits<Integer>::is_signed && sizeof(Integer) == 16)
+                        #ifdef BOOST_CHARCONV_HAS_INT128
+                        || std::is_same<boost::int128_type, Integer>::value
+                        #endif
+                        )
     {
         overflow_value /= unsigned_base;
         max_digit %= unsigned_base;
@@ -200,7 +205,6 @@ BOOST_CXX14_CONSTEXPR from_chars_result from_chars_integer_impl(const char* firs
         #endif
     }
     else
-    #endif
     {
         overflow_value /= unsigned_base;
         max_digit %= unsigned_base;
@@ -220,7 +224,7 @@ BOOST_CXX14_CONSTEXPR from_chars_result from_chars_integer_impl(const char* firs
     #if defined(BOOST_CHARCONV_HAS_INT128) && !defined(__GLIBCXX_TYPE_INT_N_0)
     constexpr std::ptrdiff_t nd_2 = std::is_same<Integer, boost::int128_type>::value ? 127 :
                                     std::is_same<Integer, boost::uint128_type>::value ? 128 :
-                                    std::numeric_limits<Integer>::digits10;
+                                    std::numeric_limits<Integer>::digits;
     #else
     constexpr std::ptrdiff_t nd_2 = std::numeric_limits<Integer>::digits;
     #endif
@@ -329,5 +333,7 @@ BOOST_CHARCONV_GCC5_CONSTEXPR from_chars_result from_chars128(const char* first,
 }
 
 }}} // Namespaces
+
+#endif // !defined(BOOST_USE_MODULES) || !defined(BOOST_CHARCONV_INTERFACE_UNIT)
 
 #endif // BOOST_CHARCONV_DETAIL_FROM_CHARS_INTEGER_IMPL_HPP

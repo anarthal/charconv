@@ -24,6 +24,8 @@
 #ifndef BOOST_CHARCONV_DETAIL_FLOFF
 #define BOOST_CHARCONV_DETAIL_FLOFF
 
+#if !defined(BOOST_USE_MODULES) || defined(BOOST_CHARCONV_INTERNAL_PARTITION_UNIT)
+
 #include <boost/charconv/detail/config.hpp>
 #include <boost/charconv/detail/bit_layouts.hpp>
 #include <boost/charconv/detail/emulated128.hpp>
@@ -31,12 +33,12 @@
 #include <boost/charconv/detail/to_chars_result.hpp>
 #include <boost/charconv/chars_format.hpp>
 #include <boost/core/bit.hpp>
-#include <type_traits>
-#include <limits>
-#include <cstdint>
-#include <cstring>
-#include <cstddef>
-#include <climits>
+#include <boost/config/std/type_traits.hpp>
+#include <boost/config/std/limits.hpp>
+#include <boost/config/std/cstdint.hpp>
+#include <boost/config/std/cstring.hpp>
+#include <boost/config/std/cstddef.hpp>
+#include <boost/config/std/climits.hpp>
 
 #ifdef BOOST_MSVC
 # pragma warning(push)
@@ -575,7 +577,7 @@ struct uint_with_known_number_of_digits<digits_, false>
 };
 
 template <typename HasFurtherDigits, typename... Args, typename std::enable_if<std::is_same<HasFurtherDigits, bool>::value, bool>::type = true>
-static BOOST_FORCEINLINE bool check_rounding_condition_inside_subsegment(
+BOOST_FORCEINLINE bool check_rounding_condition_inside_subsegment(
     std::uint32_t current_digits, std::uint32_t fractional_part,
     int remaining_digits_in_the_current_subsegment, HasFurtherDigits has_further_digits,
     Args...) noexcept 
@@ -590,7 +592,7 @@ static BOOST_FORCEINLINE bool check_rounding_condition_inside_subsegment(
 
 template <typename HasFurtherDigits, typename... Args,
           typename std::enable_if<!std::is_same<HasFurtherDigits, bool>::value, bool>::type = true>
-static BOOST_FORCEINLINE bool check_rounding_condition_inside_subsegment(
+BOOST_FORCEINLINE bool check_rounding_condition_inside_subsegment(
     std::uint32_t current_digits, std::uint32_t fractional_part,
     int remaining_digits_in_the_current_subsegment, HasFurtherDigits has_further_digits,
     Args... args) noexcept 
@@ -605,7 +607,7 @@ static BOOST_FORCEINLINE bool check_rounding_condition_inside_subsegment(
 
 template <typename HasFurtherDigits, typename... Args,
           typename std::enable_if<std::is_same<HasFurtherDigits, bool>::value, bool>::type = true>
-static BOOST_FORCEINLINE bool check_rounding_condition_with_next_bit(std::uint32_t current_digits, bool next_bit,
+BOOST_FORCEINLINE bool check_rounding_condition_with_next_bit(std::uint32_t current_digits, bool next_bit,
                                                                      HasFurtherDigits has_further_digits, Args...) noexcept 
 {
     if (!next_bit) 
@@ -618,7 +620,7 @@ static BOOST_FORCEINLINE bool check_rounding_condition_with_next_bit(std::uint32
 
 template <typename HasFurtherDigits, typename... Args,
           typename std::enable_if<!std::is_same<HasFurtherDigits, bool>::value, bool>::type = true>
-static BOOST_FORCEINLINE bool check_rounding_condition_with_next_bit(std::uint32_t current_digits, bool next_bit,
+BOOST_FORCEINLINE bool check_rounding_condition_with_next_bit(std::uint32_t current_digits, bool next_bit,
                                                                      HasFurtherDigits has_further_digits, Args... args) noexcept 
 {
     if (!next_bit) 
@@ -631,7 +633,7 @@ static BOOST_FORCEINLINE bool check_rounding_condition_with_next_bit(std::uint32
 
 template <typename UintWithKnownDigits, typename HasFurtherDigits, typename... Args, 
           typename std::enable_if<std::is_same<HasFurtherDigits, bool>::value, bool>::type = true>
-static BOOST_FORCEINLINE bool check_rounding_condition_subsegment_boundary_with_next_subsegment(
+BOOST_FORCEINLINE bool check_rounding_condition_subsegment_boundary_with_next_subsegment(
     std::uint32_t current_digits, UintWithKnownDigits next_subsegment,
     HasFurtherDigits has_further_digits, Args...) noexcept 
 {
@@ -646,7 +648,7 @@ static BOOST_FORCEINLINE bool check_rounding_condition_subsegment_boundary_with_
 
 template <typename UintWithKnownDigits, typename HasFurtherDigits, typename... Args, 
           typename std::enable_if<!std::is_same<HasFurtherDigits, bool>::value, bool>::type = true>
-static BOOST_FORCEINLINE bool check_rounding_condition_subsegment_boundary_with_next_subsegment(
+BOOST_FORCEINLINE bool check_rounding_condition_subsegment_boundary_with_next_subsegment(
     std::uint32_t current_digits, UintWithKnownDigits next_subsegment,
     HasFurtherDigits has_further_digits, Args... args) noexcept 
 {
@@ -1333,6 +1335,7 @@ BOOST_CHARCONV_SAFEBUFFERS to_chars_result floff(const double x, int precision, 
 
     auto buffer_size = static_cast<std::size_t>(last - first);
     auto buffer = first;
+    bool trailing_zeros_removed = false;
 
     BOOST_CHARCONV_ASSERT(precision >= 0);
     using namespace detail;
@@ -1525,13 +1528,13 @@ BOOST_CHARCONV_SAFEBUFFERS to_chars_result floff(const double x, int precision, 
         if (fmt == boost::charconv::chars_format::scientific)
         {
             remaining_digits = precision + 1;
-            int exponent_print_length =
-                decimal_exponent_normalized >= 100 ? 5 :
-                decimal_exponent_normalized <= -100 ? 6 :
-                decimal_exponent_normalized >= 0 ? 4 : 5;
+
+            // e+XX or e+XXX since we always print at least two characters e.g. e+02
+            const int exponent_print_length =
+                decimal_exponent_normalized > -100 && decimal_exponent_normalized < 100 ? 4 : 5;
 
             // No trailing decimal dot.
-            auto minimum_required_buffer_size =
+            const auto minimum_required_buffer_size =
                 static_cast<std::size_t>(remaining_digits + exponent_print_length + (precision != 0 ? 1 : 0));
             if (buffer_size < minimum_required_buffer_size)
             {
@@ -3849,6 +3852,7 @@ insert_decimal_dot:
         }
 
         // Remove trailing zeros.
+        trailing_zeros_removed = true;
         while (true)
         {
             auto prev = buffer - 1;
@@ -3903,7 +3907,16 @@ insert_decimal_dot:
             print_2_digits(static_cast<std::uint32_t>(decimal_exponent_normalized), buffer);
             buffer += 2;
         }
-    }    
+    }
+    else if (!trailing_zeros_removed && buffer - (decimal_dot_pos + 1) < precision)
+    {
+        // If we have fixed precision, and we don't have enough digits after the decimal yet
+        // insert a sufficient amount of zeros
+        const auto remaining_zeros = precision - (buffer - (decimal_dot_pos + 1));
+        BOOST_CHARCONV_ASSERT(remaining_zeros > 0);
+        std::memset(buffer, '0', static_cast<std::size_t>(remaining_zeros));
+        buffer += remaining_zeros;
+    }
 
     return {buffer, std::errc()};
 
@@ -4018,9 +4031,10 @@ round_up_all_9s:
                 ++decimal_dot_pos;
             }
         }
-        else if (decimal_exponent_normalized == 0)
+        else if (decimal_exponent_normalized == 0 || remaining_digits == 1)
         {
             // For the case 0.99...9 -> 1.00...0, the rounded digit is one before the first digit written.
+            // This same case applies for 0.099 -> 0.10 in the precision = 2 instance
             // Note: decimal_exponent_normalized was negative before the increment (++decimal_exponent_normalized),
             //       so we already have printed "00" onto the buffer.
             //       Hence, --digit_starting_pos doesn't go more than the starting position of the buffer.
@@ -4040,5 +4054,7 @@ round_up_all_9s:
 #ifdef BOOST_MSVC
 # pragma warning(pop)
 #endif
+
+#endif // !defined(BOOST_USE_MODULES) || defined(BOOST_CHARCONV_INTERFACE_UNIT)
 
 #endif // BOOST_CHARCONV_DETAIL_FLOFF

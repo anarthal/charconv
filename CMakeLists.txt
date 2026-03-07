@@ -3,37 +3,48 @@
 # Distributed under the Boost Software License, Version 1.0.
 # https://www.boost.org/LICENSE_1_0.txt
 
-cmake_minimum_required(VERSION 3.8...3.20)
+cmake_minimum_required(VERSION 3.8...3.31)
 
 project(boost_charconv VERSION "${BOOST_SUPERPROJECT_VERSION}" LANGUAGES CXX)
 
+# We can't make source files conditionally module units.
+# In module builds, use cc files that include their respective cpp, plus the module infrastructure
+if (BOOST_USE_MODULES)
+  set(SOURCE_SUFFIX "cc")
+else()
+  set(SOURCE_SUFFIX "cpp")
+endif()
+
 add_library(boost_charconv
-  src/from_chars.cpp
-  src/to_chars.cpp
+  src/from_chars.${SOURCE_SUFFIX}
+  src/to_chars.${SOURCE_SUFFIX}
 )
 
 add_library(Boost::charconv ALIAS boost_charconv)
+
+if (BOOST_USE_MODULES)
+  target_sources(boost_charconv
+    PUBLIC FILE_SET CXX_MODULES BASE_DIRS modules FILES
+      modules/boost_charconv.cppm
+      modules/boost_charconv_interface.cppm
+    PRIVATE FILE_SET helpers TYPE CXX_MODULES BASE_DIRS src FILES
+      src/helpers.cppm
+    )
+
+  # Enable and propagate C++23, import std, and the modules macro
+  target_compile_features(boost_charconv PUBLIC cxx_std_23)
+  set_target_properties(boost_charconv PROPERTIES CXX_MODULE_STD 1)
+  target_compile_definitions(boost_charconv PUBLIC BOOST_USE_MODULES)
+endif()
 
 target_include_directories(boost_charconv PUBLIC include)
 
 
 # find_library for quadmath does not always work so attempt
 # to compile the trivial test case we use with B2
-include(CheckCXXSourceRuns)
-set(BOOST_CHARCONV_QUADMATH_TEST_SOURCE
-"
-#include <quadmath.h>
-int main()
-{
-    __float128 f = -2.0Q;
-    f = fabsq(f);
-
-    return 0;
-}
-")
-
+include(CheckCXXSourceCompiles)
 set(CMAKE_REQUIRED_LIBRARIES "quadmath")
-check_cxx_source_runs("${BOOST_CHARCONV_QUADMATH_TEST_SOURCE}" BOOST_CHARCONV_QUADMATH_FOUND)
+check_cxx_source_compiles("#include <${CMAKE_CURRENT_SOURCE_DIR}/config/has_float128.cpp>" BOOST_CHARCONV_QUADMATH_FOUND)
 set(CMAKE_REQUIRED_LIBRARIES "")
 
 target_link_libraries(boost_charconv
